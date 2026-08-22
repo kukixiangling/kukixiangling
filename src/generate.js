@@ -110,8 +110,11 @@ function cellXY(cell) {
 }
 
 function buildTargetOrder(grid) {
+  // Only cells with real contributions get attacked — empty days are
+  // left alone as plain background squares, not blasted for no reason.
+  const contributed = grid.filter((cell) => cell.count > 0);
   // week-major, day-minor = natural left-to-right reading order
-  return [...grid].sort((a, b) => (a.week - b.week) || (a.day - b.day));
+  return contributed.sort((a, b) => (a.week - b.week) || (a.day - b.day));
 }
 
 // ---------- 3. Timing: one "shot" per cell ----------
@@ -148,6 +151,19 @@ function pct(t, total) {
 }
 
 // ---------- 4. SVG assembly ----------
+function buildEmptyCellsSVG(grid, shotCellSet) {
+  // Plain, unanimated squares for days with no contributions — Goku
+  // leaves these alone entirely.
+  return grid
+    .filter((cell) => !shotCellSet.has(`${cell.week}-${cell.day}`))
+    .map((cell) => {
+      const { x, y } = cellXY(cell);
+      const color = PALETTE.levels[cell.level];
+      return `<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="2" fill="${color}"/>`;
+    })
+    .join("\n");
+}
+
 function buildCellsSVG(shots, loopDuration) {
   return shots
     .map((shot) => {
@@ -185,6 +201,10 @@ function buildCellsSVG(shots, loopDuration) {
 // Beam: a single element pivoting at Goku's hand, rotating to face each
 // target in turn and extending/retracting to that target's distance.
 function buildBeamSVG(shots, loopDuration) {
+  if (shots.length === 0) {
+    // no contributions to attack — Goku just stands there, beam-less
+    return "";
+  }
   const angleVals = [];
   const lenVals = [];
   const keyTimes = [];
@@ -292,7 +312,8 @@ function buildLabel(username) {
   return `<text x="${MARGIN_LEFT}" y="24" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="${PALETTE.text}">${username}'s contributions — Kamehameha edition</text>`;
 }
 
-function buildSVG({ username, shots, loopDuration }) {
+function buildSVG({ username, grid, shots, loopDuration }) {
+  const shotCellSet = new Set(shots.map((s) => `${s.cell.week}-${s.cell.day}`));
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
   <style>
     text { user-select: none; }
@@ -300,6 +321,7 @@ function buildSVG({ username, shots, loopDuration }) {
   </style>
   ${buildBackground()}
   ${buildLabel(username)}
+  ${buildEmptyCellsSVG(grid, shotCellSet)}
   ${buildCellsSVG(shots, loopDuration)}
   ${buildBeamSVG(shots, loopDuration)}
   ${buildGokuSVG(shots, loopDuration)}
@@ -314,7 +336,7 @@ function buildSVG({ username, shots, loopDuration }) {
   const order = buildTargetOrder(grid);
   const { shots, totalDuration } = computeTimeline(order);
 
-  const svg = buildSVG({ username: USERNAME, shots, loopDuration: Number(totalDuration.toFixed(2)) });
+  const svg = buildSVG({ username: USERNAME, grid, shots, loopDuration: Number(totalDuration.toFixed(2)) });
 
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.writeFileSync(OUT, svg, "utf8");
