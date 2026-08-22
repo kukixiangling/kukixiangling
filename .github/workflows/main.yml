@@ -1,0 +1,33 @@
+name: Generate Goku contribution animation
+
+on:
+  schedule:
+    - cron: "0 0 * * *"   # once a day
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Generate dark + light SVGs
+        run: |
+          node src/generate.js ${{ github.repository_owner }} dist/goku-dark.svg
+          GOKU_THEME=light node src/generate.js ${{ github.repository_owner }} dist/goku-light.svg
+
+      - name: Push to output branch
+        uses: crazy-max/ghaction-github-pages@v4
+        with:
+          target_branch: output
+          build_dir: dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
